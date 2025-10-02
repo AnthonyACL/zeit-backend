@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zeit-backend
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    networks:
+      - laravel
+    depends_on:
+      - db
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: zeit-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - laravel
+
+  db:
+    image: mysql:8.0
+    container_name: zeit-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: zeit
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - laravel
+
+networks:
+  laravel:
+
+volumes:
+  dbdata:
