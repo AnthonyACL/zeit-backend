@@ -12,28 +12,21 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
-            $table->timestamps();
-        });
-
-        Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
-
-        Schema::create('sessions', function (Blueprint $table) {
-            $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
-            $table->string('ip_address', 45)->nullable();
-            $table->text('user_agent')->nullable();
-            $table->longText('payload');
-            $table->integer('last_activity')->index();
+            $table->id(); // id
+            $table->string('name'); // Nombre
+            $table->string('last_name'); // Apellido
+            $table->string('email')->unique(); // Email único
+            $table->string('password'); // Contraseña
+            $table->string('phone')->nullable(); // Teléfono opcional
+            $table->unsignedBigInteger('company_id')->nullable(); // Relación a empresa (puede ser null)
+            $table->string('institution')->nullable(); // Institución
+            $table->string('career')->nullable(); // Carrera
+            $table->time('start_time')->nullable(); // Hora de inicio de trabajo
+            $table->time('break_start')->nullable(); // Hora de inicio de descanso
+            $table->decimal('longitude', 10, 7)->nullable(); // Longitud geográfica
+            $table->decimal('latitude', 10, 7)->nullable(); // Latitud geográfica
+            $table->rememberToken(); // Token de "remember me"
+            $table->timestamps(); // created_at y updated_at
         });
     }
 
