@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Auth\AuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,6 +15,21 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+// Rutas públicas
+Route::post('/login', [AuthController::class, 'login']);
+
+// Rutas protegidas con Sanctum
+Route::middleware(['auth:sanctum'])->group(function () {
+
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/profile', [AuthController::class, 'profile']);
+
+    // Ejemplo de ruta protegida por rol con Spatie
+    Route::middleware('role:admin')->get('/admin/dashboard', function () {
+        return response()->json(['message' => 'Bienvenido, admin']);
+    });
+
+    Route::middleware('role:jefe_grupo')->get('/grupo/dashboard', function () {
+        return response()->json(['message' => 'Bienvenido, jefe de grupo']);
+    });
 });
