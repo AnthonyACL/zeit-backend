@@ -3,6 +3,8 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WorkTeamController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,7 +19,7 @@ use App\Http\Controllers\Auth\AuthController;
 
 // Rutas públicas
 Route::post('/login', [AuthController::class, 'login']);
-
+Route::post('work-teams', [WorkTeamController::class, 'store']);
 // Rutas protegidas con Sanctum
 Route::middleware(['auth:sanctum'])->group(function () {
 
@@ -32,4 +34,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::middleware('role:jefe_grupo')->get('/grupo/dashboard', function () {
         return response()->json(['message' => 'Bienvenido, jefe de grupo']);
     });
+
+    Route::post('/users', [UserController::class, 'store']);
 });

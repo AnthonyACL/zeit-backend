@@ -12,9 +12,6 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
-    /**
-     * Los atributos que se pueden asignar masivamente.
-     */
     protected $fillable = [
         'name',
         'last_name',
@@ -30,17 +27,8 @@ class User extends Authenticatable
         'latitude',
     ];
 
-    /**
-     * Los atributos ocultos para arrays/JSON
-     */
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    protected $hidden = ['password', 'remember_token'];
 
-    /**
-     * Atributos convertidos automáticamente a tipos nativos
-     */
     protected $casts = [
         'email_verified_at' => 'datetime',
         'start_time' => 'datetime:H:i',
@@ -49,16 +37,21 @@ class User extends Authenticatable
         'latitude' => 'decimal:7',
     ];
 
-    /**
-     * Mutator para encriptar contraseña automáticamente
-     */
     public function setPasswordAttribute($value)
     {
         $this->attributes['password'] = bcrypt($value);
     }
 
-    public function areas()
+    public function workTeams()
     {
-        return $this->belongsToMany(Area::class, 'worker_area');
+        return $this->belongsToMany(WorkTeam::class, 'team_user')
+            ->withTimestamps();
+    }
+
+    public function workSchedules()
+    {
+        return $this->belongsToMany(WorkSchedule::class, 'user_work_days', 'user_id', 'work_schedule_id')
+            ->withPivot(['days', 'assigned_by'])
+            ->withTimestamps();
     }
 }
