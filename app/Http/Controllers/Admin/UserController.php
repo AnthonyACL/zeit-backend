@@ -15,7 +15,7 @@ class UserController extends Controller
     {
         // Solo admin o sub_jefe pueden crear usuarios
         $creator = Auth::user();
-        if (! $creator->hasAnyRole(['admin', 'sub_jefe'])) {
+        if (! $creator->hasAnyRole(['admin', 'sub_admin'])) {
             return response()->json(['message' => 'No tienes permisos para crear usuarios.'], 403);
         }
 
@@ -26,7 +26,7 @@ class UserController extends Controller
             'password' => 'required|min:6',
             'phone' => 'nullable|string|max:20',
             'team_id' => 'nullable|exists:work_teams,id',
-            'role' => 'required|in:supervisor,colaborador',
+            'role' => 'required|in:moderator,worker',
         ]);
 
         // Crear usuario

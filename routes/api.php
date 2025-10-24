@@ -26,12 +26,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/profile', [AuthController::class, 'profile']);
 
-    // Ejemplo de ruta protegida por rol con Spatie
     Route::middleware('role:admin')->get('/admin/dashboard', function () {
         return response()->json(['message' => 'Bienvenido, admin']);
     });
 
-    Route::middleware('role:jefe_grupo')->get('/grupo/dashboard', function () {
+    Route::middleware('role:sub_admin')->get('/grupo/dashboard', function () {
         return response()->json(['message' => 'Bienvenido, jefe de grupo']);
     });
 
