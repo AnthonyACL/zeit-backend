@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('email')->unique(); // Email único
             $table->string('password'); // Contraseña
             $table->string('phone')->nullable(); // Teléfono opcional
+            $table->string('profile_image')->nullable(); // Imagen de perfil opcional
             $table->unsignedBigInteger('company_id')->nullable(); // Relación a empresa (puede ser null)
             $table->string('institution')->nullable(); // Institución
             $table->string('career')->nullable(); // Carrera

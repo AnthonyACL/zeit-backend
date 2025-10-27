@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WorkTeamController;
+use App\Http\Controllers\User\ProfileImageController;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,6 +21,7 @@ use App\Http\Controllers\Admin\WorkTeamController;
 // Rutas públicas
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('work-teams', [WorkTeamController::class, 'store']);
+Route::post('/users/{id}/profile-image', [ProfileImageController::class, 'update']);
 // Rutas protegidas con Sanctum
 Route::middleware(['auth:sanctum'])->group(function () {
 
