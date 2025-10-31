@@ -90,4 +90,18 @@ class UserController extends Controller
             'teams' => $teams,
         ]);
     }
+
+    public function index()
+    {
+        $users = User::with([
+            'roles:name',
+            'workTeams:name',
+            'workSchedules:id,name,start_time,end_time,work_team_id'
+        ])->get(['id', 'name', 'last_name', 'dni', 'email', 'phone']);
+
+        return response()->json([
+            'message' => 'Lista de usuarios obtenida correctamente.',
+            'users' => $users
+        ], 200);
+    }
 }

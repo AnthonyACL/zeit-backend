@@ -28,14 +28,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/profile', [AuthController::class, 'profile']);
 
-    Route::middleware('role:admin')->get('/admin/dashboard', function () {
-        return response()->json(['message' => 'Bienvenido, admin']);
-    });
-
-    Route::middleware('role:sub_admin')->get('/grupo/dashboard', function () {
-        return response()->json(['message' => 'Bienvenido, jefe de grupo']);
-    });
-
-    Route::post('/users', [UserController::class, 'store']);
+    Route::post('/usercreate', [UserController::class, 'store']);
     Route::get('/users/options', [UserController::class, 'options']);
+    Route::get('/users', [UserController::class, 'index']);
 });
