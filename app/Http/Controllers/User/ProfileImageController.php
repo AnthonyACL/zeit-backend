@@ -13,7 +13,7 @@ class ProfileImageController extends Controller
     {
         // Validar que se suba una imagen
         $request->validate([
-            'profile_image' => 'required|image|mimes:jpg,jpeg,png|max:2048',
+            'profile_image' => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $user = User::findOrFail($id);
