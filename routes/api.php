@@ -37,4 +37,5 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 
     Route::post('/users', [UserController::class, 'store']);
+    Route::get('/users/options', [UserController::class, 'options']);
 });

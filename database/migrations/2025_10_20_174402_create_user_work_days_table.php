@@ -16,8 +16,13 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('work_team_id')->constrained('work_teams')->onDelete('cascade');
             $table->foreignId('work_schedule_id')->constrained('work_schedules')->onDelete('cascade');
-            $table->enum('day_of_week', ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']);
-            $table->boolean('is_working')->default(true);
+
+            // 🔹 Días seleccionados (ejemplo: ["lunes","miércoles","viernes"])
+            $table->json('days')->nullable();
+
+            // 🔹 ID del usuario que asignó o modificó el horario
+            $table->foreignId('assigned_by')->nullable()->constrained('users')->onDelete('set null');
+
             $table->timestamps();
         });
     }

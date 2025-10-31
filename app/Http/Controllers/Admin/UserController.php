@@ -8,20 +8,24 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\User;
 use App\Models\WorkTeam;
 use App\Models\WorkSchedule;
+use App\Models\UserWorkDay;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
     public function store(Request $request)
     {
-        // Solo admin o sub_jefe pueden crear usuarios
         $creator = Auth::user();
+
+        // Solo admin o sub_admin pueden crear usuarios
         if (! $creator->hasAnyRole(['admin', 'sub_admin'])) {
             return response()->json(['message' => 'No tienes permisos para crear usuarios.'], 403);
         }
 
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'last_name' => 'nullable|string|max:255',
+            'dni' => 'nullable|string|max:8|unique:users,dni',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:6',
             'phone' => 'nullable|string|max:20',
@@ -31,26 +35,39 @@ class UserController extends Controller
 
         // Crear usuario
         $user = User::create([
-            'name' => $request->name,
-            'last_name' => $request->last_name,
-            'email' => $request->email,
-            'password' => $request->password,
-            'phone' => $request->phone,
+            'name' => $validated['name'],
+            'last_name' => $validated['last_name'] ?? null,
+            'dni' => $validated['dni'] ?? null,
+            'email' => $validated['email'],
+            'password' => $validated['password'],
+            'phone' => $validated['phone'] ?? null,
         ]);
 
         // Asignar rol
-        $user->assignRole($request->role);
+        $user->assignRole($validated['role']);
 
-        // Asignar equipo de trabajo (si fue enviado)
+        // Si tiene un equipo asignado
         if ($request->filled('team_id')) {
-            $team = WorkTeam::find($request->team_id);
+            $team = WorkTeam::find($validated['team_id']);
             $user->workTeams()->attach($team->id);
 
-            // Buscar horario base del equipo
+            // Buscar el horario base del equipo
             $baseSchedule = WorkSchedule::where('work_team_id', $team->id)->first();
 
             if ($baseSchedule) {
-                $user->workSchedules()->attach($baseSchedule->id, [
+                // Crear una copia del horario base solo para este usuario
+                $personalSchedule = WorkSchedule::create([
+                    'name' => $baseSchedule->name . ' (Usuario: ' . $user->name . ')',
+                    'work_team_id' => $team->id,
+                    'start_time' => $baseSchedule->start_time,
+                    'end_time' => $baseSchedule->end_time,
+                ]);
+
+                // Asignar al usuario su horario personal
+                UserWorkDay::create([
+                    'user_id' => $user->id,
+                    'work_team_id' => $team->id,
+                    'work_schedule_id' => $personalSchedule->id,
                     'days' => json_encode(['lunes', 'martes', 'miércoles', 'jueves', 'viernes']),
                     'assigned_by' => $creator->id,
                 ]);
@@ -58,8 +75,19 @@ class UserController extends Controller
         }
 
         return response()->json([
-            'message' => 'Usuario creado correctamente.',
+            'message' => 'Usuario creado correctamente con su propio horario (basado en el equipo).',
             'user' => $user->load('roles', 'workTeams', 'workSchedules')
         ], 201);
+    }
+
+    public function options()
+    {
+        $roles = Role::select('id', 'name')->get();
+        $teams = WorkTeam::select('id', 'name')->get();
+
+        return response()->json([
+            'roles' => $roles,
+            'teams' => $teams,
+        ]);
     }
 }
