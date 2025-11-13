@@ -44,6 +44,6 @@ class UserSeeder extends Seeder
             'password' => '12345678',
         ]); 
 
-        $robin->assignRole('worker');
+        $robin->assignRole('collaborator');
     }
 }

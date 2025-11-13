@@ -21,4 +21,10 @@ class WorkTeam extends Model
     {
         return $this->hasMany(WorkSchedule::class);
     }
+
+    public function projects()
+    {
+        return $this->hasMany(Project::class);
+    }
+    
 }
