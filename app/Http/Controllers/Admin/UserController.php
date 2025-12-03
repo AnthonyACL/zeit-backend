@@ -5,8 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage; 
-use Illuminate\Validation\Rule; 
+use Illuminate\Validation\Rule;
 use App\Models\User;
 use App\Models\WorkTeam;
 use App\Models\WorkSchedule;
@@ -15,13 +14,28 @@ use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
+    /**
+     * Listado general de usuarios (solo admin y sub_admin)
+     */
     public function index()
     {
-        $users = User::with([
-            'roles:name',
-            'workTeams:name',
-            'workSchedules:id,name,start_time,end_time,work_team_id'
-        ])->get(['id', 'name', 'last_name', 'dni', 'email', 'phone']);
+        $auth = Auth::user();
+
+        if (! $auth->hasAnyRole(['admin', 'sub_admin'])) {
+            return response()->json(['message' => 'No tienes acceso a esta lista.'], 403);
+        }
+
+        if ($auth->hasRole('admin')) {
+            $users = User::with(['roles:name','workTeams','workSchedules'])
+                ->where('id', '!=', $auth->id)
+                ->get();
+        } else {
+            // SUB_ADMIN → no ve admins
+            $users = User::with(['roles:name','workTeams','workSchedules'])
+                ->where('id', '!=', $auth->id)
+                ->whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))
+                ->get();
+        }
 
         return response()->json([
             'message' => 'Lista de usuarios obtenida correctamente.',
@@ -30,177 +44,181 @@ class UserController extends Controller
     }
 
     /**
-     * Almacena un nuevo usuario en la base de datos.
+     * Regenerar horario del usuario al cambiar de equipo
+     */
+    private function regenerateUserSchedule(User $user, $teamId)
+    {
+        UserWorkDay::where('user_id', $user->id)->delete();
+
+        $teamSchedule = WorkSchedule::where('work_team_id', $teamId)->get();
+
+        foreach ($teamSchedule as $day) {
+            UserWorkDay::create([
+                'user_id' => $user->id,
+                'day' => $day->day,
+                'start_time' => $day->start_time,
+                'end_time' => $day->end_time,
+            ]);
+        }
+    }
+
+    /**
+     * Crear usuario
      */
     public function store(Request $request)
     {
-        $creator = Auth::user();
+        $auth = Auth::user();
 
-        if (! $creator->hasAnyRole(['admin', 'sub_admin'])) {
-            return response()->json(['message' => 'No tienes permisos para crear usuarios.'], 403);
-        }
+        // Roles permitidos
+        $allowedRoles = $auth->hasRole('admin')
+            ? ['sub_admin', 'moderator', 'collaborator']
+            : ['moderator', 'collaborator'];
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'dni' => 'nullable|string|max:8|unique:users,dni',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
-            'phone' => 'nullable|string|max:20',
-            'team_id' => 'nullable|exists:work_teams,id', 
-            'role' => 'required|in:moderator,collaborator',
+            'password' => 'required|string|min:6',
+            'role' => ['required', Rule::in($allowedRoles)],
+            'team_id' => 'nullable|exists:work_teams,id',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
-            'last_name' => $validated['last_name'] ?? null,
-            'dni' => $validated['dni'] ?? null,
             'email' => $validated['email'],
-            'password' => bcrypt($validated['password']), 
-            'phone' => $validated['phone'] ?? null,
+            'password' => bcrypt($validated['password']),
         ]);
 
         $user->assignRole($validated['role']);
 
-        if ($request->filled('team_id')) {
-            $team = WorkTeam::find($validated['team_id']);
-            $user->workTeams()->syncWithoutDetaching([$team->id]); 
-
-            $baseSchedule = WorkSchedule::where('work_team_id', $team->id)->first();
-
-            if ($baseSchedule) {
-                $personalSchedule = WorkSchedule::create([
-                    'name' => $baseSchedule->name . ' (Usuario: ' . $user->name . ')',
-                    'work_team_id' => $team->id,
-                    'start_time' => $baseSchedule->start_time,
-                    'end_time' => $baseSchedule->end_time,
-                ]);
-
-                UserWorkDay::create([
-                    'user_id' => $user->id,
-                    'work_team_id' => $team->id,
-                    'work_schedule_id' => $personalSchedule->id,
-                    'days' => ['lunes', 'martes', 'miércoles', 'jueves', 'viernes'], 
-                    'assigned_by' => $creator->id,
-                ]);
-            }
+        // Si no tiene equipo → terminar
+        if (!$request->filled('team_id')) {
+            return response()->json([
+                'message' => 'Usuario creado sin equipo ni horario.',
+                'user' => $user
+            ], 201);
         }
 
+        // Asignar equipo
+        $user->workTeams()->sync([$validated['team_id']]);
+
+        // Crear horario
+        $this->regenerateUserSchedule($user, $validated['team_id']);
+
         return response()->json([
-            'message' => 'Usuario creado correctamente con su propio horario (basado en el equipo).',
-            'user' => $user->load('roles', 'workTeams', 'workSchedules')
+            'message' => 'Usuario creado correctamente.',
+            'user' => $user->load('roles','workTeams','workSchedules')
         ], 201);
     }
-    
+
     /**
-     * Muestra los datos de un usuario específico por ID (solo para administración).
+     * Mostrar usuario
      */
     public function show($id)
-    { 
+    {
+        $auth = Auth::user();
+
         $user = User::with('roles', 'workTeams', 'workSchedules')->findOrFail($id);
-        
-        // Verifica si el usuario autenticado tiene rol de administración o moderador
-        if (! Auth::user()->hasAnyRole(['admin', 'sub_admin', 'moderator'])) {
-             return response()->json(['message' => 'Acceso denegado para ver otros perfiles.'], 403);
+
+        // Sub_admin NO puede ver administradores
+        if ($auth->hasRole('sub_admin') && $user->hasRole('admin')) {
+            return response()->json(['message' => 'No puedes ver a un administrador.'], 403);
         }
 
         return response()->json(['user' => $user], 200);
     }
 
-    
     /**
-     * Actualiza los datos de un usuario específico por ID (solo para administración).
+     * Actualizar usuario
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, User $user)
     {
-        $user = User::findOrFail($id);
-        
-        // Solo admins y sub-admins pueden actualizar otros usuarios
-        if (! Auth::user()->hasAnyRole(['admin', 'sub_admin'])) {
-             return response()->json(['message' => 'No tienes permisos para actualizar a este usuario.'], 403);
+        $auth = Auth::user();
+
+        $allowedRoles = $auth->hasRole('admin')
+            ? ['sub_admin', 'moderator', 'collaborator']
+            : ['moderator', 'collaborator'];
+
+        if ($auth->hasRole('sub_admin') && $user->hasAnyRole(['admin','sub_admin'])) {
+            return response()->json(['message' => 'No puedes editar este usuario.'], 403);
         }
-        
-        $rules = [
-            'name' => 'sometimes|required|string|max:255',
-            'last_name' => 'nullable|string|max:255',
-            'dni' => [
-                'nullable', 
-                'string', 
-                'max:8',
-                Rule::unique('users', 'dni')->ignore($user->id), 
-            ],
-            'email' => [
-                'sometimes', 
-                'required', 
-                'email', 
-                Rule::unique('users', 'email')->ignore($user->id), 
-            ],
-            'phone' => 'nullable|string|max:20',
-            'role' => 'sometimes|required|in:moderator,collaborator',
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => ['required','email',Rule::unique('users')->ignore($user->id)],
+            'role' => ['required', Rule::in($allowedRoles)],
             'team_id' => 'nullable|exists:work_teams,id',
-            'password' => 'nullable|min:6|confirmed', 
-        ];
+        ]);
 
-        $validated = $request->validate($rules);
-        $dataToUpdate = $validated;
-        
-        if (isset($validated['password'])) {
-            $dataToUpdate['password'] = bcrypt($validated['password']);
-        } else {
-            unset($dataToUpdate['password']); 
+        $user->update([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+        ]);
+
+        $user->syncRoles([$validated['role']]);
+
+        $oldTeamId = optional($user->workTeams->first())->id;
+        $newTeamId = $validated['team_id'] ?? null;
+
+        if (!$newTeamId) {
+            $user->workTeams()->detach();
+            return response()->json(['message' => 'Usuario actualizado sin equipo.'], 200);
         }
 
-        $user->update($dataToUpdate);
-        
-        // Actualizar Rol
-        if (isset($validated['role'])) {
-            $user->syncRoles([$validated['role']]);
-        }
-        
-        // Actualizar Equipo
-        if (array_key_exists('team_id', $validated)) { // Usar array_key_exists para manejar el valor 'null'
-            if (is_null($validated['team_id'])) {
-                $user->workTeams()->sync([]); // Desasociar
-            } else {
-                $user->workTeams()->sync([$validated['team_id']]);
-            }
+        // Asignar equipo
+        $user->workTeams()->sync([$newTeamId]);
+
+        if ($oldTeamId != $newTeamId) {
+            $this->regenerateUserSchedule($user, $newTeamId);
         }
 
         return response()->json([
-            'message' => 'Usuario actualizado correctamente.',
-            'user' => $user->load('roles', 'workTeams')
+            'message' => 'Usuario actualizado.',
+            'user' => $user->load('roles','workTeams','workSchedules')
         ], 200);
     }
-    
+
     /**
-     * Elimina un usuario específico de la base de datos.
+     * Eliminar usuario
      */
-    public function destroy($id)
+    public function destroy(User $user)
     {
-        $user = User::findOrFail($id);
-        
-        // Solo el admin puede eliminar
-        if (! Auth::user()->hasRole('admin')) {
-             return response()->json(['message' => 'Solo un administrador puede eliminar usuarios.'], 403);
+        $auth = Auth::user();
+
+        if (!$auth->hasAnyRole(['admin','sub_admin'])) {
+            return response()->json(['message' => 'No tienes permiso.'], 403);
+        }
+
+        if ($auth->id === $user->id) {
+            return response()->json(['message' => 'No puedes eliminarte a ti mismo.'], 403);
+        }
+
+        if ($auth->hasRole('sub_admin') && $user->hasAnyRole(['admin','sub_admin'])) {
+            return response()->json(['message' => 'No puedes eliminar este usuario.'], 403);
+        }
+
+        if ($auth->hasRole('admin') && $user->hasRole('admin')) {
+            return response()->json(['message' => 'No puedes eliminar otro admin.'], 403);
         }
 
         $user->delete();
 
-        return response()->json(['message' => 'Usuario eliminado correctamente.'], 200);
+        return response()->json(['message' => 'Usuario eliminado.'], 200);
     }
 
-
     /**
-     * Obtiene datos de soporte (roles y equipos) para formularios.
+     * Obtener roles y equipos disponibles
      */
     public function getCreationOptions()
     {
-        $assignableRoles = Role::whereIn('name', ['moderator', 'worker'])->select('id', 'name')->get(); 
-        $teams = WorkTeam::select('id', 'name')->get();
+        $auth = Auth::user();
+
+        $assignable = $auth->hasRole('admin')
+            ? ['sub_admin', 'moderator', 'collaborator']
+            : ['moderator', 'collaborator'];
 
         return response()->json([
-            'roles' => $assignableRoles,
-            'teams' => $teams,
-        ]);
+            'roles' => Role::whereIn('name', $assignable)->get(),
+            'teams' => WorkTeam::select('id','name')->get(),
+        ], 200);
     }
 }

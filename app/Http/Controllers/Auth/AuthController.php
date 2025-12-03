@@ -16,8 +16,10 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
+            'email'     => 'required|email',
+            'password'  => 'required',
+            'latitude'  => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
         ]);
 
         $user = User::where('email', $request->email)->first();
@@ -28,26 +30,48 @@ class AuthController extends Controller
             ]);
         }
 
-        // Eliminar tokens anteriores (opcional)
+        // Validar si el usuario está activo
+        if ($user->status == 0) {
+            return response()->json([
+                'message' => 'Tu cuenta está inactiva, comunícate con el administrador.',
+            ], 403);
+        }
+
+        // Permitir solo 1 dispositivo a la vez
         $user->tokens()->delete();
 
-        // Crear nuevo token
+        // Actualizar ubicación si viene del frontend
+        if ($request->latitude && $request->longitude) {
+            $user->update([
+                'latitude'  => $request->latitude,
+                'longitude' => $request->longitude,
+            ]);
+        }
+
+        // Crear token nuevo
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'message' => 'Inicio de sesión exitoso',
-            'token' => $token,
+            'token'   => $token,
             'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'roles' => $user->getRoleNames(), // Devuelve los roles del usuario
+                'id'            => $user->id,
+                'name'          => $user->name,
+                'last_name'     => $user->last_name,
+                'email'         => $user->email,
+                'dni'           => $user->dni,
+                'phone'         => $user->phone,
+                'profile_image' => $user->profile_image,
+                'latitude'      => $user->latitude,
+                'longitude'     => $user->longitude,
+                'status'        => $user->status,
+                'roles'         => $user->getRoleNames(),
             ],
         ]);
     }
 
     /**
-     * Cierra sesión eliminando el token actual
+     * Cerrar sesión
      */
     public function logout(Request $request)
     {
@@ -59,16 +83,38 @@ class AuthController extends Controller
     }
 
     /**
-     * Obtiene la información del usuario autenticado
+     * Información del usuario autenticado
      */
     public function profile(Request $request)
     {
         $user = $request->user();
 
         return response()->json([
-            'user' => $user,
-            'roles' => $user->getRoleNames(),
+            'user'        => $user,
+            'roles'       => $user->getRoleNames(),
             'permissions' => $user->getAllPermissions()->pluck('name'),
         ]);
     }
+
+    public function updateLocation(Request $request)
+    {
+        $request->validate([
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
+        ]);
+
+        $user = $request->user();
+        $user->update([
+            'latitude' => $request->latitude,
+            'longitude' => $request->longitude,
+        ]);
+
+        return response()->json([
+            'message' => 'Ubicación actualizada correctamente',
+            'latitude' => $user->latitude,
+            'longitude' => $user->longitude,
+        ]);
+    }
+
+    
 }

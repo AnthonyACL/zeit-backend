@@ -27,6 +27,7 @@ class User extends Authenticatable
         'break_start',
         'longitude',
         'latitude',
+        'status',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -37,6 +38,7 @@ class User extends Authenticatable
         'break_start' => 'datetime:H:i',
         'longitude' => 'decimal:7',
         'latitude' => 'decimal:7',
+        'status' => 'boolean',
     ];
 
     public function setPasswordAttribute($value)

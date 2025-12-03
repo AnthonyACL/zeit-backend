@@ -6,99 +6,89 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rule;
-use App\Models\User;
 
 class ProfileController extends Controller
 {
     /**
-     * Muestra los datos del perfil del usuario autenticado.
-     * Corresponde a GET /api/profile
+     * Mostrar datos del perfil
      */
     public function show()
     {
-        // Carga las relaciones del usuario autenticado
-        $user = Auth::user()->load('roles', 'workTeams', 'workSchedules'); 
+        $user = Auth::user()->load('roles', 'workTeams', 'workSchedules');
 
-        return response()->json(['user' => $user], 200);
+        return response()->json([
+            'user' => $user
+        ], 200);
     }
-    
+
     /**
-     * Actualiza los datos del usuario autenticado.
-     * Corresponde a PUT /api/profile
+     * Actualizar datos del perfil (sin permitir cambiar contraseña)
      */
     public function update(Request $request)
     {
         $user = Auth::user();
-        
-        // Reglas de validación adaptadas para el propio usuario
-        $rules = [
-            'name' => 'sometimes|required|string|max:255',
+
+        $validated = $request->validate([
+            'name' => 'nullable|string|max:255',
             'last_name' => 'nullable|string|max:255',
-            'dni' => [
-                'nullable', 
-                'string', 
-                'max:8',
-                // Ignora el DNI del usuario actual para la unicidad
-                Rule::unique('users', 'dni')->ignore($user->id), 
-            ],
-            'email' => [
-                'sometimes', 
-                'required', 
-                'email', 
-                // Ignora el email del usuario actual para la unicidad
-                Rule::unique('users', 'email')->ignore($user->id), 
-            ],
-            'phone' => 'nullable|string|max:20',
-            // No incluye 'role' ni 'team_id'. Permite actualizar contraseña.
-            'password' => 'nullable|min:6|confirmed', 
-        ];
+            'email' => 'nullable|email|max:255|unique:users,email,' . $user->id,
+            'phone' => 'nullable|string|max:20|unique:users,phone,' . $user->id,
+            'institution' => 'nullable|string|max:255',
+            'career' => 'nullable|string|max:255',
+            'start_time' => 'nullable|date_format:H:i',
+            'break_start' => 'nullable|date_format:H:i',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            // password NO se permite
+        ]);
 
-        $validated = $request->validate($rules);
-        $dataToUpdate = $validated;
-        
-        // Hashear la nueva contraseña si se proporciona
-        if (isset($validated['password'])) {
-            $dataToUpdate['password'] = bcrypt($validated['password']);
-        } else {
-            // Evita actualizar el campo 'password' si no se envió
-            unset($dataToUpdate['password']); 
-        }
+        $user->update($validated);
 
-        $user->update($dataToUpdate);
-        
         return response()->json([
             'message' => 'Perfil actualizado correctamente.',
-            'user' => $user->load('roles', 'workTeams')
+            'user' => $user
         ], 200);
     }
-    
+
     /**
-     * Actualiza la imagen de perfil del usuario autenticado.
-     * Corresponde a POST /api/profile/image
+     * Actualizar imagen de perfil
      */
     public function updateProfileImage(Request $request)
     {
         $user = Auth::user();
-        
+
+        // 1. Validation: Ensures the file is present, an image, and under 2MB.
         $request->validate([
             'profile_image' => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
+
+        $file = $request->file('profile_image');
+        $folder = 'image_profile';
         
-        // Elimina la imagen anterior
-        if ($user->profile_image && Storage::disk('public')->exists($user->profile_image)) {
+        // Generate a unique filename to prevent collisions and security issues
+        $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+
+        // 2. Delete the old image if one exists
+        // We use Storage::disk('public')->delete() as the path stored is relative to the disk root.
+        if ($user->profile_image) {
             Storage::disk('public')->delete($user->profile_image);
         }
 
-        $path = $request->file('profile_image')->store('profile_images', 'public');
+        // 3. Store the new image using the 'public' disk
+        // storeAs() handles moving, file path generation, and stream handling efficiently.
+        // It returns the path relative to the disk (e.g., 'image_profile/filename.jpg').
+        $path = $file->storeAs($folder, $filename, 'public');
 
-        $user->update([
-            'profile_image' => $path,
-        ]);
+        // 4. Update database with the relative path
+        $user->profile_image = $path;
+        $user->save();
 
+        // 5. Return response
         return response()->json([
             'message' => 'Imagen de perfil actualizada correctamente.',
-            'image_url' => asset('storage/' . $user->profile_image),
+            // Use Storage::url() to generate the accessible public URL
+            'image_url' => Storage::disk('public')->url($user->profile_image),
+            'user' => $user, // Return updated user for convenience
         ]);
     }
 }

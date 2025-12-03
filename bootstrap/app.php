@@ -11,9 +11,16 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware): void {
-        //
+    ->withMiddleware(function (Middleware $middleware) {
+
+        // Alias del middleware personalizado
+        $middleware->alias([
+            'role' => \App\Http\Middleware\RoleMiddleware::class,
+        ]);
+
     })
-    ->withExceptions(function (Exceptions $exceptions): void {
-        //
-    })->create();
+    ->withProviders([
+        Spatie\Permission\PermissionServiceProvider::class,
+    ])
+    ->withExceptions(function (Exceptions $exceptions): void {})
+    ->create();

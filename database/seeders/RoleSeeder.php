@@ -10,13 +10,28 @@ use Spatie\Permission\Models\Role;
 class RoleSeeder extends Seeder
 {
     /**
-     * Run the database seeds.
+     * Semilla de roles por defecto
      */
     public function run(): void
     {
-        Role::firstOrCreate(['name' => 'admin']);
-        Role::firstOrCreate(['name' => 'sub_admin']);
-        Role::firstOrCreate(['name' => 'moderator']);
-        Role::firstOrCreate(['name' => 'collaborator']);
+        Role::firstOrCreate([
+        'name' => 'admin',
+        'guard_name' => 'web',
+        ]);
+
+        Role::firstOrCreate([
+            'name' => 'sub_admin',
+            'guard_name' => 'web',
+        ]);
+
+        Role::firstOrCreate([
+            'name' => 'moderator',
+            'guard_name' => 'web',
+        ]);
+
+        Role::firstOrCreate([
+            'name' => 'collaborator',
+            'guard_name' => 'web',
+        ]);
     }
 }

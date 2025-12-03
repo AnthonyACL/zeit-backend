@@ -4,86 +4,130 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\WorkTeam;
 use Illuminate\Support\Facades\DB;
-use App\Models\WorkSchedule;
+use Illuminate\Validation\Rule;
+use App\Models\WorkTeam;
 use App\Models\User;
-use App\Models\UserWorkDay;
 
 class WorkTeamController extends Controller
 {
+    /**
+     * Listar todos los equipos visibles según el rol.
+     */
     public function index()
     {
-        // Carga los equipos con sus horarios base y la lista de usuarios asociados
-        $teams = WorkTeam::with([
-            'workSchedules', 
-            // Se asumen las relaciones correctas en el modelo WorkTeam
-            'users:id,name,last_name,email' 
-        ])->get();
+        $user = auth()->user();
 
-        return response()->json([
-            'message' => 'Lista de equipos de trabajo obtenida correctamente.',
-            'teams' => $teams
-        ], 200);
+        if ($user->hasAnyRole(['admin', 'sub_admin'])) {
+            $teams = WorkTeam::with(['workSchedules', 'users:id,name,last_name,email'])->get();
+        } elseif ($user->hasRole('moderator')) {
+            // Moderator ve solo los equipos donde está asignado
+            $teams = $user->workTeams()->with(['workSchedules', 'users:id,name,last_name,email'])->get();
+        } elseif ($user->hasRole('collaborator')) {
+            // Collaborator ve solo su equipo
+            $teams = $user->workTeams()->with(['workSchedules', 'users:id,name,last_name,email'])->take(1)->get();
+        } else {
+            return response()->json(['message' => 'Rol no autorizado.'], 403);
+        }
+
+        return response()->json(['teams' => $teams], 200);
     }
 
     /**
-     * Muestra los datos detallados de un equipo específico.
-     * (Accessible por admin, sub_admin, moderator)
+     * Mostrar un equipo específico.
      */
     public function show($id)
     {
+        $user = auth()->user();
         $team = WorkTeam::with(['workSchedules', 'users:id,name,last_name,email'])->findOrFail($id);
+
+        if ($user->hasAnyRole(['admin', 'sub_admin'])) {
+            // Admin y sub_admin pueden ver cualquier equipo
+        } elseif ($user->hasRole('moderator') || $user->hasRole('collaborator')) {
+            // Solo puede ver si pertenece al equipo
+            if (!$team->users->contains($user->id)) {
+                return response()->json(['message' => 'No tienes permiso para ver este equipo.'], 403);
+            }
+        } else {
+            return response()->json(['message' => 'Rol no autorizado.'], 403);
+        }
 
         return response()->json(['team' => $team], 200);
     }
-    
+
     /**
-     * Almacena un nuevo equipo de trabajo y sus horarios base.
+     * Crear un nuevo equipo y sus horarios base.
+     * Solo admin y sub_admin
      */
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if (!$user->hasAnyRole(['admin', 'sub_admin'])) {
+            return response()->json(['message' => 'Solo admin o sub_admin pueden crear equipos.'], 403);
+        }
+
         $validatedData = $request->validate([
             'name' => 'required|string|max:255|unique:work_teams,name',
             'schedule' => 'required|array',
-            'schedule.*.is_working' => 'nullable|in:1',
-            'schedule.*.start_time' => 'required_if:schedule.*.is_working,1|nullable|date_format:H:i',
-            'schedule.*.end_time' => 'required_if:schedule.*.is_working,1|nullable|date_format:H:i|after:schedule.*.start_time',
+
+            'schedule.lunes.is_working' => 'nullable|in:1',
+            'schedule.lunes.start_time' => 'required_if:schedule.lunes.is_working,1|date_format:H:i',
+            'schedule.lunes.end_time' => 'required_if:schedule.lunes.is_working,1|date_format:H:i|after:schedule.lunes.start_time',
+
+            'schedule.martes.is_working' => 'nullable|in:1',
+            'schedule.martes.start_time' => 'required_if:schedule.martes.is_working,1|date_format:H:i',
+            'schedule.martes.end_time' => 'required_if:schedule.martes.is_working,1|date_format:H:i|after:schedule.martes.start_time',
+
+            'schedule.miércoles.is_working' => 'nullable|in:1',
+            'schedule.miércoles.start_time' => 'required_if:schedule.miércoles.is_working,1|date_format:H:i',
+            'schedule.miércoles.end_time' => 'required_if:schedule.miércoles.is_working,1|date_format:H:i|after:schedule.miércoles.start_time',
+
+            'schedule.jueves.is_working' => 'nullable|in:1',
+            'schedule.jueves.start_time' => 'required_if:schedule.jueves.is_working,1|date_format:H:i',
+            'schedule.jueves.end_time' => 'required_if:schedule.jueves.is_working,1|date_format:H:i|after:schedule.jueves.start_time',
+
+            'schedule.viernes.is_working' => 'nullable|in:1',
+            'schedule.viernes.start_time' => 'required_if:schedule.viernes.is_working,1|date_format:H:i',
+            'schedule.viernes.end_time' => 'required_if:schedule.viernes.is_working,1|date_format:H:i|after:schedule.viernes.start_time',
+
+            'schedule.sábado.is_working' => 'nullable|in:1',
+            'schedule.sábado.start_time' => 'required_if:schedule.sábado.is_working,1|date_format:H:i',
+            'schedule.sábado.end_time' => 'required_if:schedule.sábado.is_working,1|date_format:H:i|after:schedule.sábado.start_time',
+
+            'schedule.domingo.is_working' => 'nullable|in:1',
+            'schedule.domingo.start_time' => 'required_if:schedule.domingo.is_working,1|date_format:H:i',
+            'schedule.domingo.end_time' => 'required_if:schedule.domingo.is_working,1|date_format:H:i|after:schedule.domingo.start_time',
         ]);
 
         try {
             DB::beginTransaction();
-
-            $team = WorkTeam::create([
-                'name' => $validatedData['name'],
-            ]);
-
+            $team = WorkTeam::create(['name' => $validatedData['name']]);
             $createdSchedules = $this->syncWorkSchedules($team, $validatedData['schedule']);
-
             DB::commit();
 
             return response()->json([
-                'message' => 'Grupo de trabajo y horarios base creados con éxito.',
+                'message' => 'Equipo de trabajo y horarios base creados.',
                 'team' => $team,
                 'schedules_created' => $createdSchedules,
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-
-            return response()->json([
-                'message' => 'Ocurrió un error al crear el grupo de trabajo y sus horarios.',
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['message' => 'Error al crear equipo.', 'error' => $e->getMessage()], 500);
         }
     }
-    
+
     /**
-     * Actualiza un equipo de trabajo y sus horarios base.
-     * (Accessible por admin, sub_admin, moderator)
+     * Actualizar equipo y horarios.
+     * Solo admin y sub_admin
      */
     public function update(Request $request, $id)
     {
+        $user = auth()->user();
+        if (!$user->hasAnyRole(['admin', 'sub_admin'])) {
+            return response()->json(['message' => 'Solo admin o sub_admin pueden actualizar equipos.'], 403);
+        }
+
         $team = WorkTeam::findOrFail($id);
 
         $validatedData = $request->validate([
@@ -92,10 +136,8 @@ class WorkTeamController extends Controller
                 'required', 
                 'string', 
                 'max:255', 
-                // Asegura que el nombre sea único, ignorando el ID actual
                 Rule::unique('work_teams', 'name')->ignore($team->id),
             ],
-            // 'schedule' es opcional en la actualización, pero si se envía, debe ser un array válido
             'schedule' => 'sometimes|array',
             'schedule.*.is_working' => 'nullable|in:1',
             'schedule.*.start_time' => 'required_if:schedule.*.is_working,1|nullable|date_format:H:i',
@@ -105,14 +147,11 @@ class WorkTeamController extends Controller
         try {
             DB::beginTransaction();
 
-            // 1. Actualiza el nombre del equipo si se proporciona
             if (isset($validatedData['name'])) {
                 $team->update(['name' => $validatedData['name']]);
             }
-            
-            $updatedSchedules = [];
 
-            // 2. Actualiza/Sincroniza los horarios si se proporcionan
+            $updatedSchedules = [];
             if (isset($validatedData['schedule'])) {
                 $updatedSchedules = $this->syncWorkSchedules($team, $validatedData['schedule']);
             }
@@ -120,87 +159,61 @@ class WorkTeamController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'Grupo de trabajo y horarios base actualizados con éxito.',
+                'message' => 'Equipo y horarios actualizados.',
                 'team' => $team->load('workSchedules'),
                 'schedules_updated' => $updatedSchedules,
             ], 200);
 
         } catch (\Exception $e) {
             DB::rollBack();
-
-            return response()->json([
-                'message' => 'Ocurrió un error al actualizar el grupo de trabajo y sus horarios.',
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['message' => 'Error al actualizar equipo.', 'error' => $e->getMessage()], 500);
         }
     }
 
-
     /**
-     * Elimina un equipo de trabajo y desasocia a todos los usuarios.
-     * (Solo permitido para admin y sub_admin)
+     * Eliminar equipo.
+     * Solo admin y sub_admin
      */
     public function destroy($id)
     {
-        // Verificar permisos específicos para la eliminación (Control de roles de Spatie)
-        if (! Auth::user()->hasAnyRole(['admin', 'sub_admin'])) {
-            return response()->json(['message' => 'Solo un administrador o sub-administrador puede eliminar equipos.'], 403);
+        $user = auth()->user();
+        if (!$user->hasAnyRole(['admin', 'sub_admin'])) {
+            return response()->json(['message' => 'Solo admin o sub_admin pueden eliminar equipos.'], 403);
         }
-        
+
         $team = WorkTeam::findOrFail($id);
 
         try {
             DB::beginTransaction();
-
-            // Desasociar a todos los usuarios de este equipo.
-            $team->users()->sync([]); 
-            
-            // Eliminar los horarios base asociados al equipo
+            $team->users()->sync([]);
             $team->workSchedules()->delete();
-
-            // Eliminar el equipo
             $team->delete();
-            
             DB::commit();
 
-            return response()->json(['message' => 'Equipo de trabajo eliminado correctamente.'], 200);
+            return response()->json(['message' => 'Equipo eliminado correctamente.'], 200);
 
         } catch (\Exception $e) {
             DB::rollBack();
-
-            return response()->json([
-                'message' => 'Ocurrió un error al intentar eliminar el equipo de trabajo.',
-                'error' => $e->getMessage(),
-            ], 500); 
+            return response()->json(['message' => 'Error al eliminar equipo.', 'error' => $e->getMessage()], 500);
         }
     }
-    
+
     /**
-     * Lógica compartida para eliminar y recrear los horarios base del equipo.
-     * Esto simplifica la actualización.
-     *
-     * @param WorkTeam $team
-     * @param array $scheduleData
-     * @return array
+     * Sincroniza horarios base del equipo (crea/actualiza).
      */
     private function syncWorkSchedules(WorkTeam $team, array $scheduleData): array
     {
-        // 1. Eliminar todos los horarios base existentes para el equipo.
         $team->workSchedules()->delete();
-
         $createdSchedules = [];
-        $daysOfWeek = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+        $daysOfWeek = ['lunes','martes','miércoles','jueves','viernes','sábado','domingo'];
 
-        // 2. Recrear los horarios base
         foreach ($daysOfWeek as $day) {
             if (isset($scheduleData[$day]['is_working']) && $scheduleData[$day]['is_working'] == 1) {
-                
                 $hours = $scheduleData[$day];
-                
                 $schedule = $team->workSchedules()->create([
-                    'name' => "Horario Base {$team->name} - " . ucfirst($day),
-                    'start_time' => $hours['start_time'] . ':00', 
-                    'end_time' => $hours['end_time'] . ':00',     
+                    'name' => "Horario {$team->name} - " . ucfirst($day),
+                    'start_time' => $hours['start_time'] . ':00',
+                    'end_time' => $hours['end_time'] . ':00',
                 ]);
 
                 $createdSchedules[] = [
@@ -209,7 +222,7 @@ class WorkTeamController extends Controller
                 ];
             }
         }
+
         return $createdSchedules;
     }
 }
-
