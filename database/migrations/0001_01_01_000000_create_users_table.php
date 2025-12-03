@@ -21,14 +21,14 @@ return new class extends Migration
             $table->string('phone')->unique()->nullable(); // Teléfono
             $table->string('profile_image')->nullable(); // Imagen de perfil opcional
             
-            $table->unsignedBigInteger('company_id')->nullable(); // Relación a empresa (puede ser null)
+            $table->unsignedBigInteger('company_id')->nullable(); // Relación a empresa 
             $table->string('institution')->nullable(); // Institución
             $table->string('career')->nullable(); // Carrera
             $table->time('start_time')->nullable(); // Hora de inicio de trabajo
             $table->time('break_start')->nullable(); // Hora de inicio de descanso
             $table->decimal('longitude', 10, 7)->nullable(); // Longitud geográfica
             $table->decimal('latitude', 10, 7)->nullable(); // Latitud geográfica
-            $table->rememberToken(); // Token de "remember me"
+            $table->rememberToken(); // Token de remember me
             $table->timestamps(); // created_at y updated_at
         });
     }

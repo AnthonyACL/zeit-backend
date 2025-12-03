@@ -25,7 +25,7 @@ return new class extends Migration
 
             // Estados fijos del Kanban
             $table->enum('status', ['no_asignada', 'asiganada', 'en_progreso', 'en_revision', 'completado'])->default('no_asignada');
-            $table->integer('order')->default(0); // Orden dentro del estado
+            $table->integer('order')->default(0); 
             $table->timestamps();
         });
     }

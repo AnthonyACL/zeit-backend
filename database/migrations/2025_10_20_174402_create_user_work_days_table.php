@@ -17,10 +17,10 @@ return new class extends Migration
             $table->foreignId('work_team_id')->constrained('work_teams')->onDelete('cascade');
             $table->foreignId('work_schedule_id')->constrained('work_schedules')->onDelete('cascade');
 
-            // 🔹 Días seleccionados (ejemplo: ["lunes","miércoles","viernes"])
+            // Días seleccionados (ejemplo: ["lunes","miércoles","viernes"])
             $table->json('days')->nullable();
 
-            // 🔹 ID del usuario que asignó o modificó el horario
+            // ID del usuario que asignó o modificó el horario
             $table->foreignId('assigned_by')->nullable()->constrained('users')->onDelete('set null');
 
             $table->timestamps();

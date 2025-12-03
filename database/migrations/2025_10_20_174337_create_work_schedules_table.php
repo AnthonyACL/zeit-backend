@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('work_schedules', function (Blueprint $table) {
             $table->id();
-            $table->string('name'); // Ej: Mañana, Tarde, Noche
+            $table->string('name'); 
             $table->unsignedBigInteger('work_team_id');
             $table->time('start_time');
             $table->time('end_time');
